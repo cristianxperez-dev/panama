@@ -1,0 +1,2600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baseball Matchup Grid - League Adjusted</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+        }
+        .player-list {
+            flex: 1;
+        }
+        .player-list h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        .player-pool, .selected-list {
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            min-height: 200px;
+            padding: 10px;
+            background: #fafafa;
+        }
+        .player-item {
+            background: white;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 4px;
+            cursor: move;
+            border: 1px solid #ddd;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        .player-item:hover {
+            background: #f0f0f0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .player-item.dragging {
+            opacity: 0.5;
+        }
+        .player-item.drag-over {
+            border-top: 3px solid #007bff;
+        }
+        .lefty {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        .id-badge {
+            color: #666;
+            font-size: 0.85em;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+            display: block;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .grid-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        td:first-child, th:first-child {
+            text-align: left;
+            font-weight: bold;
+            background-color: #f8f9fa;
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        th.lefty-header {
+            color: #dc3545;
+        }
+        td.lefty-row {
+            color: #dc3545;
+        }
+        .split-info {
+            font-size: 0.85em;
+            color: #666;
+            font-weight: normal;
+        }
+        .lefty .split-info {
+            color: #999;
+        }
+        .woba-excellent { background-color: #d73027; color: white; }
+        .woba-good { background-color: #fc8d59; }
+        .woba-average { background-color: #fee090; }
+        .woba-below { background-color: #e0f3f8; }
+        .woba-poor { background-color: #91bfdb; }
+        .woba-bad { background-color: #4575b4; color: white; }
+        .woba-na { background-color: #e0e0e0; color: #999; }
+        .instructions {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        label {
+            display: block;
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .formula-note {
+            background: #e7f3ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #007bff;
+            font-size: 0.9em;
+        }
+        .league-note {
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #dc3545;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚾ Baseball Matchup Grid - League Adjusted wOBA</h1>
+    
+    <div class="instructions">
+        <strong>Instructions:</strong> Drag players from the pool to your lineup. Reorder by dragging within the lineup. Click "Generate Grid" to see matchups.
+        <br><strong style="color: #d73027;">Red background = good matchup for batter (high wOBA)</strong>, <strong style="color: #4575b4;">Blue/Green background = bad matchup for batter (low wOBA)</strong>, Gray = insufficient data. <strong style="color: #dc3545;">Red text = Left-handed player</strong>
+    </div>
+
+    <div class="league-note">
+        <strong>⚖️ League Adjustment Applied:</strong> Performance adjusted to MLB-equivalent level.
+        <br><strong>Batters:</strong> wOBA × factor (deflate) - e.g., .400 in Indy × 0.85 = .340 MLB-equivalent
+        <br><strong>Pitchers:</strong> wOBA ÷ factor (inflate) - e.g., .250 allowed in Indy ÷ 0.85 = .294 MLB-equivalent
+        <br>Factors: MLB=1.00, AAA=0.95, AA/High-A=0.90, Winter/Int=0.93, Indy=0.85, Rookie=0.80
+    </div>
+
+    <div class="formula-note">
+        <strong>How predictions work:</strong> <strong>50% batter's adjusted wOBA vs pitcher hand + 50% pitcher's adjusted wOBA allowed vs batter side</strong>.
+    </div>
+
+    <div class="controls">
+        <div class="player-list">
+            <h3>Available Pitchers</h3>
+            <label>Drag to add to lineup:</label>
+            <div id="pitcherPool" class="player-pool"></div>
+            
+            <h3 style="margin-top: 20px;">Your Pitcher Lineup</h3>
+            <label>Drag to reorder:</label>
+            <div id="selectedPitchers" class="selected-list"></div>
+        </div>
+        
+        <div class="player-list">
+            <h3>Available Batters</h3>
+            <label>Drag to add to lineup:</label>
+            <div id="batterPool" class="player-pool"></div>
+            
+            <h3 style="margin-top: 20px;">Your Batter Lineup</h3>
+            <label>Drag to reorder:</label>
+            <div id="selectedBatters" class="selected-list"></div>
+        </div>
+    </div>
+
+    <button onclick="generateGrid()">Generate Grid</button>
+
+    <div class="grid-container" style="margin-top: 20px;">
+        <table id="matchupGrid">
+            <thead>
+                <tr><th>Drag players to lineups above</th></tr>
+            </thead>
+            <tbody>
+                <tr><td style="text-align: center; padding: 40px; color: #999;">Click "Generate Grid" to see matchups</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const fullData = 
+{
+  "batters": [
+    {
+      "id": "10868",
+      "name": "Rojas Jr., Mel",
+      "side": "L"
+    },
+    {
+      "id": "13962",
+      "name": "Arenado, Nolan",
+      "side": "R"
+    },
+    {
+      "id": "31316",
+      "name": "Solano, Donovan",
+      "side": "R"
+    },
+    {
+      "id": "93433",
+      "name": "Hernaiz, Darell",
+      "side": "R"
+    },
+    {
+      "id": "10102",
+      "name": "Alfaro, Jorge",
+      "side": "R"
+    },
+    {
+      "id": "9693",
+      "name": "Judge, Aaron",
+      "side": "R"
+    },
+    {
+      "id": "12854",
+      "name": "Diaz, Elias",
+      "side": "R"
+    },
+    {
+      "id": "14727",
+      "name": "Vazquez, Christian",
+      "side": "R"
+    },
+    {
+      "id": "13110",
+      "name": "Gonzalez, Erik",
+      "side": "R"
+    },
+    {
+      "id": "-1124116",
+      "name": "Kim, Young Woong",
+      "side": "L"
+    },
+    {
+      "id": "-1055460",
+      "name": "Yoon, Dong Hee",
+      "side": "R"
+    },
+    {
+      "id": "-1054465",
+      "name": "Kim, Ju Won",
+      "side": "L"
+    },
+    {
+      "id": "-1052864",
+      "name": "Kim, Whee Jip",
+      "side": "R"
+    },
+    {
+      "id": "-1051100",
+      "name": "Moon, Sung Ju",
+      "side": "L"
+    },
+    {
+      "id": "-1050657",
+      "name": "Lee, Jae Hyun",
+      "side": "R"
+    },
+    {
+      "id": "-914171",
+      "name": "Choi, Ji Hoon",
+      "side": "L"
+    },
+    {
+      "id": "-914166",
+      "name": "Kim, Ji Chan",
+      "side": "L"
+    },
+    {
+      "id": "-908429",
+      "name": "Moon, Bo Gyeong",
+      "side": "L"
+    },
+    {
+      "id": "-807540",
+      "name": "Jeon, Min Jae",
+      "side": "R"
+    },
+    {
+      "id": "-806791",
+      "name": "Kim, Min Hyeok",
+      "side": "L"
+    },
+    {
+      "id": "-806734",
+      "name": "Jung, Soo Bin",
+      "side": "L"
+    },
+    {
+      "id": "-805939",
+      "name": "Ryu, Ji Hyuk",
+      "side": "L"
+    },
+    {
+      "id": "-805557",
+      "name": "Hwang, Jae Gyun",
+      "side": "R"
+    },
+    {
+      "id": "-804649",
+      "name": "Kim, Hyun Soo",
+      "side": "L"
+    },
+    {
+      "id": "-804644",
+      "name": "Park, Seong Han",
+      "side": "L"
+    },
+    {
+      "id": "-804257",
+      "name": "Kwon, Hee Dong",
+      "side": "R"
+    },
+    {
+      "id": "-804219",
+      "name": "Yang, Suk Hwan",
+      "side": "R"
+    },
+    {
+      "id": "-804218",
+      "name": "Kang, Seung Ho",
+      "side": "R"
+    },
+    {
+      "id": "-804202",
+      "name": "Choi, Jeong",
+      "side": "R"
+    },
+    {
+      "id": "-804194",
+      "name": "Han, Dong Min",
+      "side": "L"
+    },
+    {
+      "id": "-804182",
+      "name": "Jeon, Jun Woo",
+      "side": "R"
+    },
+    {
+      "id": "-804181",
+      "name": "Son, A Seop",
+      "side": "L"
+    },
+    {
+      "id": "-804174",
+      "name": "Koo, Ja Wook",
+      "side": "L"
+    },
+    {
+      "id": "-804139",
+      "name": "Hur, Kyoung Min",
+      "side": "R"
+    },
+    {
+      "id": "-804138",
+      "name": "Park, Kun Woo",
+      "side": "R"
+    },
+    {
+      "id": "-804137",
+      "name": "Kim, Jae Hwan",
+      "side": "L"
+    },
+    {
+      "id": "-804135",
+      "name": "Yang, Eui Ji",
+      "side": "R"
+    },
+    {
+      "id": "-804126",
+      "name": "Park, Hae Min",
+      "side": "L"
+    },
+    {
+      "id": "-791513",
+      "name": "Oh, Ji Hwan",
+      "side": "L"
+    },
+    {
+      "id": "-791498",
+      "name": "Park, Min Woo",
+      "side": "L"
+    },
+    {
+      "id": "15618",
+      "name": "Davidson, Matt",
+      "side": "R"
+    },
+    {
+      "id": "75392",
+      "name": "Heredia, Guillermo",
+      "side": "R"
+    },
+    {
+      "id": "226038",
+      "name": "Kang, Baekho",
+      "side": "L"
+    },
+    {
+      "id": "138875",
+      "name": "Arroyo, Edwin",
+      "side": "L"
+    },
+    {
+      "id": "4757",
+      "name": "Mejia, Francisco",
+      "side": "R"
+    },
+    {
+      "id": "4866",
+      "name": "Alcantara, Sergio",
+      "side": "R"
+    },
+    {
+      "id": "37646",
+      "name": "Bonifacio, Emilio",
+      "side": "R"
+    },
+    {
+      "id": "79192",
+      "name": "Robert, Luis",
+      "side": "R"
+    },
+    {
+      "id": "3762",
+      "name": "Tenerowicz, Robbie",
+      "side": "R"
+    },
+    {
+      "id": "106941",
+      "name": "Strahm, Kellen",
+      "side": "R"
+    },
+    {
+      "id": "121041",
+      "name": "Zavala, Aaron",
+      "side": "L"
+    },
+    {
+      "id": "138742",
+      "name": "Kinney, Cooper",
+      "side": "L"
+    },
+    {
+      "id": "73601",
+      "name": "Vaughn, Andrew",
+      "side": "R"
+    },
+    {
+      "id": "92620",
+      "name": "Freeman, Cody",
+      "side": "R"
+    },
+    {
+      "id": "80091",
+      "name": "Robinson, Kristian",
+      "side": "R"
+    },
+    {
+      "id": "124180",
+      "name": "Young, Taylor",
+      "side": "R"
+    }
+  ],
+  "pitchers": [
+    {
+      "id": "3614",
+      "name": "Agrazal, Dario",
+      "hand": "R"
+    },
+    {
+      "id": "4449",
+      "name": "Peterson, David",
+      "hand": "L"
+    },
+    {
+      "id": "4503",
+      "name": "Cease, Dylan",
+      "hand": "R"
+    },
+    {
+      "id": "4629",
+      "name": "Manaea, Sean",
+      "hand": "L"
+    },
+    {
+      "id": "4696",
+      "name": "Guerra, Javy",
+      "hand": "R"
+    },
+    {
+      "id": "4781",
+      "name": "Blackburn, Paul",
+      "hand": "R"
+    },
+    {
+      "id": "4814",
+      "name": "Suarez, Ranger",
+      "hand": "L"
+    },
+    {
+      "id": "4895",
+      "name": "Jurado, Ariel",
+      "hand": "R"
+    },
+    {
+      "id": "4931",
+      "name": "Lopez, Pablo",
+      "hand": "R"
+    },
+    {
+      "id": "5234",
+      "name": "Castillo, Luis",
+      "hand": "R"
+    },
+    {
+      "id": "5856",
+      "name": "Eflin, Zach",
+      "hand": "R"
+    },
+    {
+      "id": "6089",
+      "name": "Berrios, Jose",
+      "hand": "R"
+    },
+    {
+      "id": "6258",
+      "name": "Irvin, Cole ",
+      "hand": "L"
+    },
+    {
+      "id": "6368",
+      "name": "Fried, Max",
+      "hand": "L"
+    },
+    {
+      "id": "6492",
+      "name": "Lugo, Seth",
+      "hand": "R"
+    },
+    {
+      "id": "6699",
+      "name": "Freeland, Kyle",
+      "hand": "L"
+    },
+    {
+      "id": "7308",
+      "name": "Bassitt, Chris",
+      "hand": "R"
+    },
+    {
+      "id": "8348",
+      "name": "Nola, Aaron",
+      "hand": "R"
+    },
+    {
+      "id": "8353",
+      "name": "Giolito, Lucas",
+      "hand": "R"
+    },
+    {
+      "id": "9097",
+      "name": "Rea, Colin",
+      "hand": "R"
+    },
+    {
+      "id": "9684",
+      "name": "Snell, Blake",
+      "hand": "L"
+    },
+    {
+      "id": "10095",
+      "name": "Rodriguez, Eduardo",
+      "hand": "L"
+    },
+    {
+      "id": "10177",
+      "name": "Montas, Frankie",
+      "hand": "R"
+    },
+    {
+      "id": "10442",
+      "name": "Baldonado, Alberto",
+      "hand": "L"
+    },
+    {
+      "id": "10555",
+      "name": "Pivetta, Nick",
+      "hand": "R"
+    },
+    {
+      "id": "10839",
+      "name": "Walker, Taijuan",
+      "hand": "R"
+    },
+    {
+      "id": "10914",
+      "name": "Wacha, Michael",
+      "hand": "R"
+    },
+    {
+      "id": "11269",
+      "name": "Gausman, Kevin",
+      "hand": "R"
+    },
+    {
+      "id": "12249",
+      "name": "Lorenzen, Michael",
+      "hand": "R"
+    },
+    {
+      "id": "12289",
+      "name": "Boyd, Matthew",
+      "hand": "L"
+    },
+    {
+      "id": "12702",
+      "name": "Otero, Andy",
+      "hand": "L"
+    },
+    {
+      "id": "13070",
+      "name": "Corbin, Patrick",
+      "hand": "L"
+    },
+    {
+      "id": "13092",
+      "name": "Heaney, Andrew",
+      "hand": "L"
+    },
+    {
+      "id": "13109",
+      "name": "Urena, Jose",
+      "hand": "R"
+    },
+    {
+      "id": "13633",
+      "name": "Taillon, Jameson",
+      "hand": "R"
+    },
+    {
+      "id": "13857",
+      "name": "Anderson, Tyler",
+      "hand": "L"
+    },
+    {
+      "id": "15936",
+      "name": "Perez, Martin",
+      "hand": "L"
+    },
+    {
+      "id": "16317",
+      "name": "Eovaldi, Nathan",
+      "hand": "R"
+    },
+    {
+      "id": "16638",
+      "name": "Sale, Chris",
+      "hand": "L"
+    },
+    {
+      "id": "17037",
+      "name": "Kelly, Merrill",
+      "hand": "R"
+    },
+    {
+      "id": "19471",
+      "name": "Quintana, Jose",
+      "hand": "L"
+    },
+    {
+      "id": "19935",
+      "name": "Espino, Paolo",
+      "hand": "R"
+    },
+    {
+      "id": "27120",
+      "name": "Kershaw, Clayton",
+      "hand": "L"
+    },
+    {
+      "id": "28751",
+      "name": "Scherzer, Max",
+      "hand": "R"
+    },
+    {
+      "id": "36512",
+      "name": "Morton, Charlie",
+      "hand": "R"
+    },
+    {
+      "id": "66445",
+      "name": "Littell, Zack",
+      "hand": "R"
+    },
+    {
+      "id": "66612",
+      "name": "Valdez, Framber",
+      "hand": "L"
+    },
+    {
+      "id": "67861",
+      "name": "Barria, Jaime",
+      "hand": "R"
+    },
+    {
+      "id": "67896",
+      "name": "Peralta, Freddy",
+      "hand": "R"
+    },
+    {
+      "id": "67903",
+      "name": "Gallen, Zac",
+      "hand": "R"
+    },
+    {
+      "id": "68361",
+      "name": "Flaherty, Jack",
+      "hand": "R"
+    },
+    {
+      "id": "68628",
+      "name": "Alcantara, Sandy",
+      "hand": "R"
+    },
+    {
+      "id": "68899",
+      "name": "Sanchez, Cristopher",
+      "hand": "L"
+    },
+    {
+      "id": "69078",
+      "name": "Ryan, Joe",
+      "hand": "R"
+    },
+    {
+      "id": "69227",
+      "name": "Canning, Griffin",
+      "hand": "R"
+    },
+    {
+      "id": "69260",
+      "name": "Gomber, Austin",
+      "hand": "L"
+    },
+    {
+      "id": "69311",
+      "name": "Mejia, Humberto",
+      "hand": "R"
+    },
+    {
+      "id": "69340",
+      "name": "Keller, Mitch",
+      "hand": "R"
+    },
+    {
+      "id": "69773",
+      "name": "Abreu, Bryan",
+      "hand": "R"
+    },
+    {
+      "id": "70162",
+      "name": "Houck, Tanner",
+      "hand": "R"
+    },
+    {
+      "id": "70526",
+      "name": "Webb, Logan",
+      "hand": "R"
+    },
+    {
+      "id": "70890",
+      "name": "Sandoval, Patrick",
+      "hand": "L"
+    },
+    {
+      "id": "70973",
+      "name": "Singer, Brady",
+      "hand": "R"
+    },
+    {
+      "id": "72132",
+      "name": "Falter, Bailey",
+      "hand": "L"
+    },
+    {
+      "id": "72208",
+      "name": "Kremer, Dean",
+      "hand": "R"
+    },
+    {
+      "id": "72760",
+      "name": "Javier, Cristian",
+      "hand": "R"
+    },
+    {
+      "id": "73109",
+      "name": "Lawrence, Justin",
+      "hand": "R"
+    },
+    {
+      "id": "73499",
+      "name": "Luzardo, Jesus",
+      "hand": "L"
+    },
+    {
+      "id": "73508",
+      "name": "Ragans, Cole",
+      "hand": "L"
+    },
+    {
+      "id": "73535",
+      "name": "Burnes, Corbin",
+      "hand": "R"
+    },
+    {
+      "id": "73655",
+      "name": "Wentz, Joey",
+      "hand": "L"
+    },
+    {
+      "id": "73701",
+      "name": "Hernandez, Kenny",
+      "hand": "L"
+    },
+    {
+      "id": "73840",
+      "name": "Mendoza, Abdiel",
+      "hand": "R"
+    },
+    {
+      "id": "74107",
+      "name": "Nelson, Ryne",
+      "hand": "R"
+    },
+    {
+      "id": "74172",
+      "name": "Assad, Javier",
+      "hand": "R"
+    },
+    {
+      "id": "74179",
+      "name": "Kirby, George",
+      "hand": "R"
+    },
+    {
+      "id": "74689",
+      "name": "Weissert, Greg",
+      "hand": "R"
+    },
+    {
+      "id": "74801",
+      "name": "Crawford, Kutter",
+      "hand": "R"
+    },
+    {
+      "id": "75910",
+      "name": "Baz, Shane",
+      "hand": "R"
+    },
+    {
+      "id": "76142",
+      "name": "Greene, Hunter",
+      "hand": "R"
+    },
+    {
+      "id": "76288",
+      "name": "Allen, Logan",
+      "hand": "L"
+    },
+    {
+      "id": "76657",
+      "name": "Abbott, Andrew",
+      "hand": "L"
+    },
+    {
+      "id": "76760",
+      "name": "Gore, MacKenzie",
+      "hand": "L"
+    },
+    {
+      "id": "76832",
+      "name": "Holton, Tyler",
+      "hand": "L"
+    },
+    {
+      "id": "76998",
+      "name": "Whitlock, Garrett",
+      "hand": "R"
+    },
+    {
+      "id": "77178",
+      "name": "Brown, Aaron",
+      "hand": "R"
+    },
+    {
+      "id": "77878",
+      "name": "Skubal, Tarik",
+      "hand": "L"
+    },
+    {
+      "id": "78628",
+      "name": "Sears, JP",
+      "hand": "L"
+    },
+    {
+      "id": "79935",
+      "name": "Bello, Brayan",
+      "hand": "R"
+    },
+    {
+      "id": "80233",
+      "name": "Ortiz, Luis",
+      "hand": "R"
+    },
+    {
+      "id": "80435",
+      "name": "Gilbert, Logan",
+      "hand": "R"
+    },
+    {
+      "id": "80848",
+      "name": "Hjelle, Sean",
+      "hand": "R"
+    },
+    {
+      "id": "81812",
+      "name": "Bradley, Taj",
+      "hand": "R"
+    },
+    {
+      "id": "94082",
+      "name": "Garcia, Jorge",
+      "hand": "R"
+    },
+    {
+      "id": "94345",
+      "name": "Pfaadt, Brandon",
+      "hand": "R"
+    },
+    {
+      "id": "94383",
+      "name": "Henry, Tommy",
+      "hand": "L"
+    },
+    {
+      "id": "95106",
+      "name": "Kikuchi, Yusei",
+      "hand": "L"
+    },
+    {
+      "id": "95402",
+      "name": "Bibee, Tanner",
+      "hand": "R"
+    },
+    {
+      "id": "95843",
+      "name": "Brown, Hunter",
+      "hand": "R"
+    },
+    {
+      "id": "95988",
+      "name": "Gomez, Miguel",
+      "hand": "R"
+    },
+    {
+      "id": "106239",
+      "name": "Gonzalez, James",
+      "hand": "L"
+    },
+    {
+      "id": "106464",
+      "name": "Crochet, Garrett",
+      "hand": "L"
+    },
+    {
+      "id": "106583",
+      "name": "Skenes, Paul",
+      "hand": "R"
+    },
+    {
+      "id": "108600",
+      "name": "Elder, Bryce",
+      "hand": "R"
+    },
+    {
+      "id": "109717",
+      "name": "Imanaga, Shota",
+      "hand": "L"
+    },
+    {
+      "id": "116274",
+      "name": "Woo, Bryan",
+      "hand": "R"
+    },
+    {
+      "id": "133855",
+      "name": "Gowens, Riley",
+      "hand": "R"
+    },
+    {
+      "id": "171347",
+      "name": "Rodriguez, Erian",
+      "hand": "R"
+    },
+    {
+      "id": "211103",
+      "name": "Cienfuegos, Miguel",
+      "hand": "L"
+    },
+    {
+      "id": "227044",
+      "name": "Yamamoto, Yoshinobu",
+      "hand": "R"
+    }
+  ],
+  "batter_stats": [
+    {
+      "id": "10868",
+      "name": "Rojas Jr., Mel",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.406
+    },
+    {
+      "id": "13962",
+      "name": "Arenado, Nolan",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.313
+    },
+    {
+      "id": "31316",
+      "name": "Solano, Donovan",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.291
+    },
+    {
+      "id": "93433",
+      "name": "Hernaiz, Darell",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.298
+    },
+    {
+      "id": "10102",
+      "name": "Alfaro, Jorge",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.266
+    },
+    {
+      "id": "9693",
+      "name": "Judge, Aaron",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.427
+    },
+    {
+      "id": "10102",
+      "name": "Alfaro, Jorge",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.274
+    },
+    {
+      "id": "12854",
+      "name": "Diaz, Elias",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.305
+    },
+    {
+      "id": "14727",
+      "name": "Vazquez, Christian",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.246
+    },
+    {
+      "id": "13962",
+      "name": "Arenado, Nolan",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.284
+    },
+    {
+      "id": "9693",
+      "name": "Judge, Aaron",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.469
+    },
+    {
+      "id": "12854",
+      "name": "Diaz, Elias",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.267
+    },
+    {
+      "id": "31316",
+      "name": "Solano, Donovan",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.303
+    },
+    {
+      "id": "14727",
+      "name": "Vazquez, Christian",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.241
+    },
+    {
+      "id": "93433",
+      "name": "Hernaiz, Darell",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.328
+    },
+    {
+      "id": "13110",
+      "name": "Gonzalez, Erik",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.11
+    },
+    {
+      "id": "-1124116",
+      "name": "Kim, Young Woong",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.4
+    },
+    {
+      "id": "-1055460",
+      "name": "Yoon, Dong Hee",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.317
+    },
+    {
+      "id": "-1054465",
+      "name": "Kim, Ju Won",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.223
+    },
+    {
+      "id": "-1052864",
+      "name": "Kim, Whee Jip",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.184
+    },
+    {
+      "id": "-1051100",
+      "name": "Moon, Sung Ju",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.28
+    },
+    {
+      "id": "-1050657",
+      "name": "Lee, Jae Hyun",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.336
+    },
+    {
+      "id": "-914171",
+      "name": "Choi, Ji Hoon",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.23
+    },
+    {
+      "id": "-914166",
+      "name": "Kim, Ji Chan",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.246
+    },
+    {
+      "id": "-908429",
+      "name": "Moon, Bo Gyeong",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.469
+    },
+    {
+      "id": "-807540",
+      "name": "Jeon, Min Jae",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.244
+    },
+    {
+      "id": "-806791",
+      "name": "Kim, Min Hyeok",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.266
+    },
+    {
+      "id": "-806734",
+      "name": "Jung, Soo Bin",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.363
+    },
+    {
+      "id": "-805939",
+      "name": "Ryu, Ji Hyuk",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.153
+    },
+    {
+      "id": "-805557",
+      "name": "Hwang, Jae Gyun",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.188
+    },
+    {
+      "id": "-804649",
+      "name": "Kim, Hyun Soo",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.171
+    },
+    {
+      "id": "-804644",
+      "name": "Park, Seong Han",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.166
+    },
+    {
+      "id": "-804257",
+      "name": "Kwon, Hee Dong",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.225
+    },
+    {
+      "id": "-804219",
+      "name": "Yang, Suk Hwan",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.18
+    },
+    {
+      "id": "-804218",
+      "name": "Kang, Seung Ho",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.358
+    },
+    {
+      "id": "-804202",
+      "name": "Choi, Jeong",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.295
+    },
+    {
+      "id": "-804194",
+      "name": "Han, Dong Min",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.26
+    },
+    {
+      "id": "-804182",
+      "name": "Jeon, Jun Woo",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.277
+    },
+    {
+      "id": "-804181",
+      "name": "Son, A Seop",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.214
+    },
+    {
+      "id": "-804174",
+      "name": "Koo, Ja Wook",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.375
+    },
+    {
+      "id": "-804139",
+      "name": "Hur, Kyoung Min",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.257
+    },
+    {
+      "id": "-804138",
+      "name": "Park, Kun Woo",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.22
+    },
+    {
+      "id": "-804137",
+      "name": "Kim, Jae Hwan",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.33
+    },
+    {
+      "id": "-804135",
+      "name": "Yang, Eui Ji",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.287
+    },
+    {
+      "id": "-804126",
+      "name": "Park, Hae Min",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.332
+    },
+    {
+      "id": "-791513",
+      "name": "Oh, Ji Hwan",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.23
+    },
+    {
+      "id": "-791498",
+      "name": "Park, Min Woo",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.212
+    },
+    {
+      "id": "15618",
+      "name": "Davidson, Matt",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.46
+    },
+    {
+      "id": "75392",
+      "name": "Heredia, Guillermo",
+      "side": "R",
+      "vs_hand": "R",
+      "woba": 0.431
+    },
+    {
+      "id": "226038",
+      "name": "Kang, Baekho",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.225
+    },
+    {
+      "id": "138875",
+      "name": "Arroyo, Edwin",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.279
+    },
+    {
+      "id": "138875",
+      "name": "Arroyo, Edwin",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.275
+    },
+    {
+      "id": "4757",
+      "name": "Mejia, Francisco",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.196
+    },
+    {
+      "id": "4866",
+      "name": "Alcantara, Sergio",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.151
+    },
+    {
+      "id": "37646",
+      "name": "Bonifacio, Emilio",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.288
+    },
+    {
+      "id": "79192",
+      "name": "Robert, Luis",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.401
+    },
+    {
+      "id": "3762",
+      "name": "Tenerowicz, Robbie",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.273
+    },
+    {
+      "id": "106941",
+      "name": "Strahm, Kellen",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.337
+    },
+    {
+      "id": "121041",
+      "name": "Zavala, Aaron",
+      "side": "L",
+      "vs_hand": "L",
+      "woba": 0.221
+    },
+    {
+      "id": "138742",
+      "name": "Kinney, Cooper",
+      "side": "L",
+      "vs_hand": "R",
+      "woba": 0.261
+    },
+    {
+      "id": "73601",
+      "name": "Vaughn, Andrew",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.543
+    },
+    {
+      "id": "92620",
+      "name": "Freeman, Cody",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.564
+    },
+    {
+      "id": "80091",
+      "name": "Robinson, Kristian",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.233
+    },
+    {
+      "id": "124180",
+      "name": "Young, Taylor",
+      "side": "R",
+      "vs_hand": "L",
+      "woba": 0.209
+    }
+  ],
+  "pitcher_stats": [
+    {
+      "id": "3614",
+      "name": "Agrazal, Dario",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.33
+    },
+    {
+      "id": "3614",
+      "name": "Agrazal, Dario",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.405
+    },
+    {
+      "id": "4449",
+      "name": "Peterson, David",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.345
+    },
+    {
+      "id": "4503",
+      "name": "Cease, Dylan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.392
+    },
+    {
+      "id": "4629",
+      "name": "Manaea, Sean",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.202
+    },
+    {
+      "id": "4696",
+      "name": "Guerra, Javy",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.332
+    },
+    {
+      "id": "4696",
+      "name": "Guerra, Javy",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.291
+    },
+    {
+      "id": "4781",
+      "name": "Blackburn, Paul",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.236
+    },
+    {
+      "id": "4814",
+      "name": "Suarez, Ranger",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.178
+    },
+    {
+      "id": "4895",
+      "name": "Jurado, Ariel",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.303
+    },
+    {
+      "id": "4895",
+      "name": "Jurado, Ariel",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.29
+    },
+    {
+      "id": "4931",
+      "name": "Lopez, Pablo",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.426
+    },
+    {
+      "id": "5234",
+      "name": "Castillo, Luis",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.41
+    },
+    {
+      "id": "5856",
+      "name": "Eflin, Zach",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.263
+    },
+    {
+      "id": "6089",
+      "name": "Berrios, Jose",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.459
+    },
+    {
+      "id": "6258",
+      "name": "Irvin, Cole ",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.317
+    },
+    {
+      "id": "6368",
+      "name": "Fried, Max",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.134
+    },
+    {
+      "id": "6492",
+      "name": "Lugo, Seth",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.184
+    },
+    {
+      "id": "6699",
+      "name": "Freeland, Kyle",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.387
+    },
+    {
+      "id": "7308",
+      "name": "Bassitt, Chris",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.359
+    },
+    {
+      "id": "8348",
+      "name": "Nola, Aaron",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.398
+    },
+    {
+      "id": "8353",
+      "name": "Giolito, Lucas",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.174
+    },
+    {
+      "id": "9097",
+      "name": "Rea, Colin",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.303
+    },
+    {
+      "id": "9684",
+      "name": "Snell, Blake",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.174
+    },
+    {
+      "id": "10095",
+      "name": "Rodriguez, Eduardo",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.353
+    },
+    {
+      "id": "10177",
+      "name": "Montas, Frankie",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.145
+    },
+    {
+      "id": "10442",
+      "name": "Baldonado, Alberto",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.259
+    },
+    {
+      "id": "10442",
+      "name": "Baldonado, Alberto",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.266
+    },
+    {
+      "id": "10555",
+      "name": "Pivetta, Nick",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.227
+    },
+    {
+      "id": "10839",
+      "name": "Walker, Taijuan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.154
+    },
+    {
+      "id": "10914",
+      "name": "Wacha, Michael",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.36
+    },
+    {
+      "id": "11269",
+      "name": "Gausman, Kevin",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.399
+    },
+    {
+      "id": "12249",
+      "name": "Lorenzen, Michael",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.346
+    },
+    {
+      "id": "12289",
+      "name": "Boyd, Matthew",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.419
+    },
+    {
+      "id": "12702",
+      "name": "Otero, Andy",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.283
+    },
+    {
+      "id": "12702",
+      "name": "Otero, Andy",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.295
+    },
+    {
+      "id": "13070",
+      "name": "Corbin, Patrick",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.353
+    },
+    {
+      "id": "13092",
+      "name": "Heaney, Andrew",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.271
+    },
+    {
+      "id": "13109",
+      "name": "Urena, Jose",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.402
+    },
+    {
+      "id": "13633",
+      "name": "Taillon, Jameson",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.416
+    },
+    {
+      "id": "13857",
+      "name": "Anderson, Tyler",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.31
+    },
+    {
+      "id": "15936",
+      "name": "Perez, Martin",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.426
+    },
+    {
+      "id": "16317",
+      "name": "Eovaldi, Nathan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.215
+    },
+    {
+      "id": "16638",
+      "name": "Sale, Chris",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.25
+    },
+    {
+      "id": "17037",
+      "name": "Kelly, Merrill",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.321
+    },
+    {
+      "id": "19471",
+      "name": "Quintana, Jose",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.218
+    },
+    {
+      "id": "19935",
+      "name": "Espino, Paolo",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.35
+    },
+    {
+      "id": "19935",
+      "name": "Espino, Paolo",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.354
+    },
+    {
+      "id": "27120",
+      "name": "Kershaw, Clayton",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.187
+    },
+    {
+      "id": "28751",
+      "name": "Scherzer, Max",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.151
+    },
+    {
+      "id": "36512",
+      "name": "Morton, Charlie",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.27
+    },
+    {
+      "id": "66445",
+      "name": "Littell, Zack",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.31
+    },
+    {
+      "id": "66612",
+      "name": "Valdez, Framber",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.36
+    },
+    {
+      "id": "67861",
+      "name": "Barria, Jaime",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.356
+    },
+    {
+      "id": "67861",
+      "name": "Barria, Jaime",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.342
+    },
+    {
+      "id": "67896",
+      "name": "Peralta, Freddy",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.256
+    },
+    {
+      "id": "67903",
+      "name": "Gallen, Zac",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.231
+    },
+    {
+      "id": "68361",
+      "name": "Flaherty, Jack",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.343
+    },
+    {
+      "id": "68628",
+      "name": "Alcantara, Sandy",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.298
+    },
+    {
+      "id": "68899",
+      "name": "Sanchez, Cristopher",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.139
+    },
+    {
+      "id": "69078",
+      "name": "Ryan, Joe",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.314
+    },
+    {
+      "id": "69227",
+      "name": "Canning, Griffin",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.229
+    },
+    {
+      "id": "69260",
+      "name": "Gomber, Austin",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.459
+    },
+    {
+      "id": "69311",
+      "name": "Mejia, Humberto",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.367
+    },
+    {
+      "id": "69311",
+      "name": "Mejia, Humberto",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.315
+    },
+    {
+      "id": "69340",
+      "name": "Keller, Mitch",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.144
+    },
+    {
+      "id": "69773",
+      "name": "Abreu, Bryan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.257
+    },
+    {
+      "id": "70162",
+      "name": "Houck, Tanner",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.202
+    },
+    {
+      "id": "70526",
+      "name": "Webb, Logan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.335
+    },
+    {
+      "id": "70890",
+      "name": "Sandoval, Patrick",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.383
+    },
+    {
+      "id": "70973",
+      "name": "Singer, Brady",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.185
+    },
+    {
+      "id": "72132",
+      "name": "Falter, Bailey",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.341
+    },
+    {
+      "id": "72208",
+      "name": "Kremer, Dean",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.376
+    },
+    {
+      "id": "72760",
+      "name": "Javier, Cristian",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.241
+    },
+    {
+      "id": "73109",
+      "name": "Lawrence, Justin",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.299
+    },
+    {
+      "id": "73109",
+      "name": "Lawrence, Justin",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.304
+    },
+    {
+      "id": "73499",
+      "name": "Luzardo, Jesus",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.325
+    },
+    {
+      "id": "73508",
+      "name": "Ragans, Cole",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.296
+    },
+    {
+      "id": "73535",
+      "name": "Burnes, Corbin",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.204
+    },
+    {
+      "id": "73655",
+      "name": "Wentz, Joey",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.359
+    },
+    {
+      "id": "73701",
+      "name": "Hernandez, Kenny",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.342
+    },
+    {
+      "id": "73701",
+      "name": "Hernandez, Kenny",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.236
+    },
+    {
+      "id": "73840",
+      "name": "Mendoza, Abdiel",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.256
+    },
+    {
+      "id": "73840",
+      "name": "Mendoza, Abdiel",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.342
+    },
+    {
+      "id": "74107",
+      "name": "Nelson, Ryne",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.335
+    },
+    {
+      "id": "74172",
+      "name": "Assad, Javier",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.16
+    },
+    {
+      "id": "74179",
+      "name": "Kirby, George",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.229
+    },
+    {
+      "id": "74689",
+      "name": "Weissert, Greg",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.345
+    },
+    {
+      "id": "74801",
+      "name": "Crawford, Kutter",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.633
+    },
+    {
+      "id": "75910",
+      "name": "Baz, Shane",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.462
+    },
+    {
+      "id": "76142",
+      "name": "Greene, Hunter",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.265
+    },
+    {
+      "id": "76288",
+      "name": "Allen, Logan",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.345
+    },
+    {
+      "id": "76288",
+      "name": "Allen, Logan",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.288
+    },
+    {
+      "id": "76657",
+      "name": "Abbott, Andrew",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.282
+    },
+    {
+      "id": "76760",
+      "name": "Gore, MacKenzie",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.55
+    },
+    {
+      "id": "76832",
+      "name": "Holton, Tyler",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.301
+    },
+    {
+      "id": "76998",
+      "name": "Whitlock, Garrett",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.283
+    },
+    {
+      "id": "77178",
+      "name": "Brown, Aaron",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.667
+    },
+    {
+      "id": "77878",
+      "name": "Skubal, Tarik",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.497
+    },
+    {
+      "id": "78628",
+      "name": "Sears, JP",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.301
+    },
+    {
+      "id": "79935",
+      "name": "Bello, Brayan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.162
+    },
+    {
+      "id": "80233",
+      "name": "Ortiz, Luis",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.449
+    },
+    {
+      "id": "80435",
+      "name": "Gilbert, Logan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.292
+    },
+    {
+      "id": "80848",
+      "name": "Hjelle, Sean",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.377
+    },
+    {
+      "id": "81812",
+      "name": "Bradley, Taj",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.44
+    },
+    {
+      "id": "94082",
+      "name": "Garcia, Jorge",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.373
+    },
+    {
+      "id": "94082",
+      "name": "Garcia, Jorge",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.503
+    },
+    {
+      "id": "94345",
+      "name": "Pfaadt, Brandon",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.417
+    },
+    {
+      "id": "94383",
+      "name": "Henry, Tommy",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.383
+    },
+    {
+      "id": "95106",
+      "name": "Kikuchi, Yusei",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.197
+    },
+    {
+      "id": "95402",
+      "name": "Bibee, Tanner",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.347
+    },
+    {
+      "id": "95843",
+      "name": "Brown, Hunter",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.366
+    },
+    {
+      "id": "95988",
+      "name": "Gomez, Miguel",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.333
+    },
+    {
+      "id": "95988",
+      "name": "Gomez, Miguel",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.355
+    },
+    {
+      "id": "106239",
+      "name": "Gonzalez, James",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.334
+    },
+    {
+      "id": "106239",
+      "name": "Gonzalez, James",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.282
+    },
+    {
+      "id": "106464",
+      "name": "Crochet, Garrett",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.319
+    },
+    {
+      "id": "106583",
+      "name": "Skenes, Paul",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.336
+    },
+    {
+      "id": "108600",
+      "name": "Elder, Bryce",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.165
+    },
+    {
+      "id": "109717",
+      "name": "Imanaga, Shota",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.111
+    },
+    {
+      "id": "116274",
+      "name": "Woo, Bryan",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.201
+    },
+    {
+      "id": "133855",
+      "name": "Gowens, Riley",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.382
+    },
+    {
+      "id": "171347",
+      "name": "Rodriguez, Erian",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.315
+    },
+    {
+      "id": "171347",
+      "name": "Rodriguez, Erian",
+      "hand": "R",
+      "vs_side": "L",
+      "woba": 0.316
+    },
+    {
+      "id": "211103",
+      "name": "Cienfuegos, Miguel",
+      "hand": "L",
+      "vs_side": "R",
+      "woba": 0.35
+    },
+    {
+      "id": "211103",
+      "name": "Cienfuegos, Miguel",
+      "hand": "L",
+      "vs_side": "L",
+      "woba": 0.248
+    },
+    {
+      "id": "227044",
+      "name": "Yamamoto, Yoshinobu",
+      "hand": "R",
+      "vs_side": "R",
+      "woba": 0.488
+    }
+  ]
+};
+
+        const allowedPitchers = ['76288','67861','69311','4895','106219','94082','19935','95988','73840','73109','3614','171347','4696','10442','106239','12702','73701','211103'];
+        const allowedBatters = ['13962','138875','93433','14727','31316','10102','9693'];  // Added Aaron Judge
+
+        const data = {
+            pitchers: fullData.pitchers.filter(p => allowedPitchers.includes(p.id)),
+            batters: fullData.batters.filter(b => allowedBatters.includes(b.id)),
+            batter_stats: fullData.batter_stats.filter(s => allowedBatters.includes(s.id)),
+            pitcher_stats: fullData.pitcher_stats.filter(s => allowedPitchers.includes(s.id))
+        };
+
+        let draggedElement = null;
+
+        window.onload = function() {
+            const pitcherPool = document.getElementById('pitcherPool');
+            const batterPool = document.getElementById('batterPool');
+            
+            data.pitchers.sort((a, b) => a.name.localeCompare(b.name));
+            data.pitchers.forEach(p => {
+                const div = createPlayerItem(p.id, p.name, p.hand, 'pitcher');
+                pitcherPool.appendChild(div);
+            });
+            
+            data.batters.sort((a, b) => a.name.localeCompare(b.name));
+            data.batters.forEach(b => {
+                const div = createPlayerItem(b.id, b.name, b.side, 'batter');
+                batterPool.appendChild(div);
+            });
+        };
+
+        function createPlayerItem(id, name, handedness, type) {
+            const div = document.createElement('div');
+            div.className = 'player-item';
+            if (handedness === 'L') div.classList.add('lefty');
+            div.draggable = true;
+            div.dataset.id = id;
+            div.dataset.type = type;
+            div.innerHTML = `${name} <span class="id-badge">(${id}) [${handedness}]</span>`;
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('dragend', handleDragEnd);
+            return div;
+        }
+
+        function handleDragStart(e) {
+            draggedElement = e.target;
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            if (e.target.classList.contains('player-item')) e.target.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            if (e.target.classList.contains('player-item')) e.target.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) e.stopPropagation();
+            const dropZone = e.currentTarget;
+            if (draggedElement) {
+                if (e.target.classList.contains('player-item')) {
+                    dropZone.insertBefore(draggedElement, e.target);
+                } else {
+                    dropZone.appendChild(draggedElement);
+                }
+            }
+            return false;
+        }
+
+        ['pitcherPool', 'selectedPitchers', 'batterPool', 'selectedBatters'].forEach(id => {
+            const zone = document.getElementById(id);
+            zone.addEventListener('dragover', handleDragOver);
+            zone.addEventListener('drop', handleDrop);
+        });
+
+        document.addEventListener('dragenter', e => {
+            if (e.target.classList.contains('player-item')) handleDragEnter(e);
+        });
+
+        document.addEventListener('dragleave', e => {
+            if (e.target.classList.contains('player-item')) handleDragLeave(e);
+        });
+
+        function getBatterSplits(batterId) {
+            const vsL = data.batter_stats.find(s => s.id === batterId && s.vs_hand === 'L');
+            const vsR = data.batter_stats.find(s => s.id === batterId && s.vs_hand === 'R');
+            return { vsL: vsL ? vsL.woba : null, vsR: vsR ? vsR.woba : null };
+        }
+
+        function getPitcherSplits(pitcherId) {
+            const vsL = data.pitcher_stats.find(s => s.id === pitcherId && s.vs_side === 'L');
+            const vsR = data.pitcher_stats.find(s => s.id === pitcherId && s.vs_side === 'R');
+            return { vsL: vsL ? vsL.woba : null, vsR: vsR ? vsR.woba : null };
+        }
+
+        function formatWoba(woba) {
+            if (woba === null || woba === undefined) return 'N/A';
+            return woba.toFixed(3).substring(1);
+        }
+
+        function predictMatchup(batterId, pitcherId) {
+            const batter = data.batters.find(b => b.id === batterId);
+            const pitcher = data.pitchers.find(p => p.id === pitcherId);
+            if (!batter || !pitcher) return null;
+            
+            const batterStat = data.batter_stats.find(s => s.id === batterId && s.vs_hand === pitcher.hand);
+            const pitcherStat = data.pitcher_stats.find(s => s.id === pitcherId && s.vs_side === batter.side);
+            if (!batterStat || !pitcherStat) return null;
+            
+            return (batterStat.woba + pitcherStat.woba) / 2;
+        }
+
+        function getWobaClass(woba) {
+            if (woba === null) return 'woba-na';
+            if (woba >= 0.360) return 'woba-excellent';
+            if (woba >= 0.340) return 'woba-good';
+            if (woba >= 0.320) return 'woba-average';
+            if (woba >= 0.300) return 'woba-below';
+            if (woba >= 0.250) return 'woba-poor';
+            return 'woba-bad';
+        }
+
+        function generateGrid() {
+            const selectedPitchers = Array.from(document.getElementById('selectedPitchers').children);
+            const selectedBatters = Array.from(document.getElementById('selectedBatters').children);
+            
+            if (selectedPitchers.length === 0 || selectedBatters.length === 0) {
+                alert('Please drag at least one pitcher and one batter to the lineups');
+                return;
+            }
+            
+            const pitcherIds = selectedPitchers.map(el => el.dataset.id);
+            const batterIds = selectedBatters.map(el => el.dataset.id);
+            
+            const table = document.getElementById('matchupGrid');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+            
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+            
+            const headerRow = document.createElement('tr');
+            const emptyCell = document.createElement('th');
+            emptyCell.textContent = 'Batter \\ Pitcher';
+            headerRow.appendChild(emptyCell);
+            
+            pitcherIds.forEach(pitcherId => {
+                const pitcher = data.pitchers.find(p => p.id === pitcherId);
+                const splits = getPitcherSplits(pitcherId);
+                const th = document.createElement('th');
+                if (pitcher.hand === 'L') th.classList.add('lefty-header');
+                th.innerHTML = `${pitcher.name} (${pitcherId})<br><span class="split-info">vs L: ${formatWoba(splits.vsL)} | vs R: ${formatWoba(splits.vsR)}</span>`;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            
+            batterIds.forEach(batterId => {
+                const batter = data.batters.find(b => b.id === batterId);
+                const splits = getBatterSplits(batterId);
+                const row = document.createElement('tr');
+                
+                const nameCell = document.createElement('td');
+                if (batter.side === 'L') nameCell.classList.add('lefty-row');
+                nameCell.innerHTML = `${batter.name} (${batterId})<br><span class="split-info">vs L: ${formatWoba(splits.vsL)} | vs R: ${formatWoba(splits.vsR)}</span>`;
+                row.appendChild(nameCell);
+                
+                pitcherIds.forEach(pitcherId => {
+                    const td = document.createElement('td');
+                    const prediction = predictMatchup(batterId, pitcherId);
+                    
+                    if (prediction === null) {
+                        td.textContent = 'N/A';
+                        td.className = 'woba-na';
+                    } else {
+                        td.textContent = formatWoba(prediction);
+                        td.className = getWobaClass(prediction);
+                    }
+                    
+                    row.appendChild(td);
+                });
+                
+                tbody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
